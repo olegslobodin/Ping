@@ -13,7 +13,7 @@ using namespace std;
 
 #pragma comment (lib,"ws2_32")
 
-typedef struct ip_hdr //заголовок IP 
+typedef struct ip_hdr //IP header
 {
 	unsigned char verhlen;
 	unsigned char tos : 6;
@@ -28,7 +28,7 @@ typedef struct ip_hdr //заголовок IP
 	unsigned int destination;
 }IpHeader;
 
-typedef  struct icmp_hdr //заголовок ICMP
+typedef  struct icmp_hdr //ICMP header
 {
 	unsigned char i_type;
 	unsigned char i_code;

@@ -48,7 +48,7 @@ SOCKET InitSocket(sockaddr_in my_addr)
 	SOCKET my_socket = WSASocket(AF_INET, SOCK_RAW, IPPROTO_ICMP, 0, 0, WSA_FLAG_OVERLAPPED);
 	bind(my_socket, (sockaddr*)&my_addr, sizeof my_addr);
 	int timeout = 3000;
-	setsockopt(my_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof timeout); //таймаут получения
+	setsockopt(my_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof timeout);
 
 	return my_socket;
 }
@@ -59,7 +59,7 @@ void Work(SOCKET my_socket, string ip, string ipLocal, sockaddr_in remoteAddr)
 	char* icmp = new char[icmp_size];
 	IcmpHeader *icmp_package = GetIcmpPackage(icmp_size, icmp);
 
-	if (!ipLocal.empty())  //установка ip отправителя вручную
+	if (!ipLocal.empty())  //manual set source IP
 	{
 		int ip_size = sizeof(IpHeader) + icmp_size;
 		char* ip_package = new char[ip_size];
@@ -82,25 +82,25 @@ IcmpHeader* GetIcmpPackage(int icmp_size, char* package_memory)
 	icmpHeader.i_code = 0;
 	icmpHeader.i_seq = 2;
 	icmpHeader.i_crc = 0;
-	icmpHeader.i_id = (USHORT)GetCurrentProcessId();//записать в ICMP идентификатор процесса.      
+	icmpHeader.i_id = (USHORT)GetCurrentProcessId();
 
-	//создаем довесок из данных в 32 байта заполненый буквой Z, чтоб было похоже на настоящее
+	//add into package 32 bytes of data ('Z' letters)
 	memcpy(package_memory, &icmpHeader, sizeof icmpHeader);
 	memset(package_memory + sizeof icmpHeader, 'Z', packageDataSize);
 
 	IcmpHeader *icmp_package = (IcmpHeader *)package_memory;
-	icmp_package->i_crc = crc2((USHORT*)icmp_package, icmp_size);//считаем контрольную сумму пакета, заголовок+данные
+	icmp_package->i_crc = crc2((USHORT*)icmp_package, icmp_size);//count checksum
 
 	return icmp_package;
 }
 
 void InitIpPackage(char* ip_package, SOCKET my_socket, int ip_size, int icmp_size, IcmpHeader *icmp_package, string ip, string ipLocal)
 {
-	//здесь формируем IP заголовок вручную
-	// и собираем пакет наш IP+Icmp+данные
+	//manually create IP header
+	//gather our package: ip header + icmp header + data
 
 	int param = 1;
-	setsockopt(my_socket, IPPROTO_IP, IP_HDRINCL, (char*)&param, sizeof param);//сообщаем что сами слепим заголовок
+	setsockopt(my_socket, IPPROTO_IP, IP_HDRINCL, (char*)&param, sizeof param);//say that we manually create header
 
 	IpHeader IpHead = { 0 };
 	IpHead.verhlen = 69;
@@ -113,8 +113,7 @@ void InitIpPackage(char* ip_package, SOCKET my_socket, int ip_size, int icmp_siz
 	memcpy(ip_package, &IpHead, sizeof(IpHeader));
 	memcpy(ip_package + sizeof(IpHeader), icmp_package, icmp_size);
 
-	//crc IP система посчитает сама, с ним можно не париться
-	//однако для ICMP расчет обязателен 
+	//checksum counting automatic for IP
 }
 
 void Ping(SOCKET my_socket, string ip, char* package, int package_size, sockaddr_in remoteAddr)
@@ -155,7 +154,7 @@ sockaddr_in InitAddress(unsigned long addr)
 	return address;
 }
 
-unsigned int Analize(char* data, sockaddr_in* adr, DWORD time) //разбор ответа
+unsigned int Analize(char* data, sockaddr_in* adr, DWORD time) //analize reply
 {
 	char* Ip = "";
 	IpHeader *ipPacket = (IpHeader*)data;
@@ -167,14 +166,14 @@ unsigned int Analize(char* data, sockaddr_in* adr, DWORD time) //разбор ответа
 	int TTL = (int)ipPacket->ttl;
 	data += sizeof(IpHeader);
 	IcmpHeader *icmpPacket = (IcmpHeader*)data;
-	if (GetCurrentProcessId() == icmpPacket->i_id)//проверка что это мы слали.
+	if (GetCurrentProcessId() == icmpPacket->i_id) //check if we sent it
 		cout << "Reply from " << Ip << ": time=" << time << "ms TTL=" << TTL << endl;
 	else
 		cout << "Fake packet\n";
 	return ipPacket->source;
 }
 
-USHORT crc2(USHORT* addr, int count) //http://www.ietf.org/rfc/rfc1071.txt подсчет CRC
+USHORT crc2(USHORT* addr, int count) //http://www.ietf.org/rfc/rfc1071.txt CRC counting
 {
 	long sum = 0;
 
