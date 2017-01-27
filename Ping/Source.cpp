@@ -6,22 +6,26 @@ const int packageDataSize = 32;
 
 int main()
 {
+#if  defined _WIN32 || defined _WIN64
 	_CrtSetDbgFlag(33);
-	string ip, ipLocal;
+#endif;
 
+	string ip, ipLocal;
 	Input(&ip, &ipLocal);
 
 	sockaddr_in remoteAddr = InitAddress(inet_addr(ip));
 	sockaddr_in myAddr = InitAddress(htonl(INADDR_ANY));
-
 	SOCKET my_socket = InitSocket(myAddr);
 
 	Work(my_socket, ip, ipLocal, remoteAddr);
 
+#if  defined _WIN32 || defined _WIN64
 	closesocket(my_socket);
 	WSACleanup();
 
 	system("Pause");
+#endif;
+
 	return 0;
 }
 
@@ -32,7 +36,11 @@ void Input(string* ip, string* ipLocal)
 	if (ip->empty())
 	{
 		*ip = "213.180.204.3";
+#if  defined _WIN32 || defined _WIN64
 		system("cls");
+#elif defined __linux__
+		cout<<"\033[2j\033[1;1H";
+#endif
 		cout << "Ping: 213.180.204.3 [yandex.ru]" << endl;
 	}
 
@@ -42,10 +50,13 @@ void Input(string* ip, string* ipLocal)
 
 SOCKET InitSocket(sockaddr_in my_addr)
 {
+#if  defined _WIN32 || defined _WIN64
 	WSADATA wsd = { 0 };
 	WSAStartup(0x202, &wsd);
-
 	SOCKET my_socket = WSASocket(AF_INET, SOCK_RAW, IPPROTO_ICMP, 0, 0, WSA_FLAG_OVERLAPPED);
+#elif defined __linux__
+	SOCKET my_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+#endif
 	bind(my_socket, (sockaddr*)&my_addr, sizeof my_addr);
 	int timeout = 3000;
 	setsockopt(my_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof timeout);
@@ -82,7 +93,11 @@ IcmpHeader* GetIcmpPackage(int icmp_size, char* package_memory)
 	icmpHeader.i_code = 0;
 	icmpHeader.i_seq = 2;
 	icmpHeader.i_crc = 0;
+#if  defined _WIN32 || defined _WIN64
 	icmpHeader.i_id = (USHORT)GetCurrentProcessId();
+#elif defined __linux__
+	icmpHeader.i_id = getpid();
+#endif
 
 	//add into package 32 bytes of data ('Z' letters)
 	memcpy(package_memory, &icmpHeader, sizeof icmpHeader);
@@ -122,24 +137,40 @@ void Ping(SOCKET my_socket, string ip, char* package, int package_size, sockaddr
 
 	for (int i = 0; i < 4; ++i)
 	{
+#if  defined _WIN32 || defined _WIN64
 		DWORD sendTime = GetTickCount();
+#elif defined __linux__
+        time_t sendTime = time(0);
+#endif
 
 		sendto(my_socket, package, package_size, 0, (sockaddr*)&remoteAddr, sizeof remoteAddr);
 
 		char bf[256] = { 0 };
+#if  defined _WIN32 || defined _WIN64
 		int outlent = sizeof(sockaddr_in);
+#elif defined __linux__
+		socklen_t outlent = sizeof(sockaddr_in);
+#endif
 		sockaddr_in out_ = { 0 };
 		out_.sin_family = AF_INET;
 
 		if (recvfrom(my_socket, bf, 256, 0, (sockaddr*)&out_, &outlent) == SOCKET_ERROR)
 		{
+#if  defined _WIN32 || defined _WIN64
 			if (WSAGetLastError() == WSAETIMEDOUT)
 			{
 				cout << "Request timeout\n";
 				continue;
 			}
+#elif defined __linux__
+			PrintLastError();
+#endif
 		}
+#if  defined _WIN32 || defined _WIN64
 		Analize(bf, &out_, GetTickCount() - sendTime);
+#elif defined __linux__
+		Analize(bf, &out_, time(0) - sendTime);
+#endif
 		memset(bf, 0, 0);
 		Sleep(1000);
 	}
@@ -148,7 +179,11 @@ void Ping(SOCKET my_socket, string ip, char* package, int package_size, sockaddr
 sockaddr_in InitAddress(unsigned long addr)
 {
 	sockaddr_in address = { 0 };
+#if  defined _WIN32 || defined _WIN64
 	address.sin_addr.S_un.S_addr = addr;
+#elif defined __linux__
+	address.sin_addr.s_addr = addr;
+#endif
 	address.sin_family = AF_INET;
 	address.sin_port = htons(6666);
 	return address;
@@ -166,7 +201,11 @@ unsigned int Analize(char* data, sockaddr_in* adr, DWORD time) //analize reply
 	int TTL = (int)ipPacket->ttl;
 	data += sizeof(IpHeader);
 	IcmpHeader *icmpPacket = (IcmpHeader*)data;
+#if  defined _WIN32 || defined _WIN64
 	if (GetCurrentProcessId() == icmpPacket->i_id) //check if we sent it
+#elif defined __linux__
+	if (getpid() == icmpPacket->i_id) //check if we sent it
+#endif
 		cout << "Reply from " << Ip << ": time=" << time << "ms TTL=" << TTL << endl;
 	else
 		cout << "Fake packet\n";
@@ -192,6 +231,18 @@ USHORT crc2(USHORT* addr, int count) //http://www.ietf.org/rfc/rfc1071.txt CRC c
 		sum = (sum & 0xffff) + (sum >> 16);
 
 	return (USHORT)~sum;
+}
+
+void PrintLastError() {
+#if  defined _WIN32 || defined _WIN64
+	wchar_t buf[256];
+    FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 256, NULL);
+    wcout << buf;
+#elif defined __linux__
+	int error = errno;
+	cout << strerror(error);
+#endif
 }
 
 unsigned long inet_addr(string cp)

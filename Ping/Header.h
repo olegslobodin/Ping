@@ -1,17 +1,41 @@
 #pragma once
 
+#include <iostream>
+#include <string>
+
+
+#if  defined _WIN32 || defined _WIN64
+
 #include <WinSock2.h>
 #include <ws2tcpip.h>
 #include <Ws2ipdef.h>
 #include <windows.h>
 #include <crtdbg.h>
-#include <iostream>
 
-#include <string>
+#pragma comment (lib,"ws2_32")
+
+#elif defined __linux__
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h> //for getnameinfo()
+#include <arpa/inet.h>
+#include <errno.h>
+#include <unistd.h> //for getpid()
+#include <string.h> //for memcpy()
+
+#define SOCKET_ERROR -1
+#define SOCKET int
+#define USHORT unsigned short
+#define Sleep sleep
+#define DWORD time_t
+#define NI_MAXHOST 1025
+#define NI_MAXSERV 32
+
+#endif
 
 using namespace std;
 
-#pragma comment (lib,"ws2_32")
 
 typedef struct ip_hdr //IP header
 {
@@ -52,8 +76,10 @@ void InitIpPackage(char* ip_package, SOCKET my_socket, int ip_size, int icmp_siz
 
 void Ping(SOCKET my_socket, string ip, char* package, int package_size, sockaddr_in remoteAddr);
 
-unsigned int Analize(char* data, SOCKADDR_IN* adr, DWORD time);
+unsigned int Analize(char* data, sockaddr_in* adr, DWORD time);
 
 USHORT crc2(USHORT* addr, int count);
+
+void PrintLastError();
 
 unsigned long inet_addr(string cp);
