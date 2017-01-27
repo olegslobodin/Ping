@@ -27,10 +27,11 @@
 #define SOCKET_ERROR -1
 #define SOCKET int
 #define USHORT unsigned short
-#define Sleep sleep
 #define DWORD time_t
 #define NI_MAXHOST 1025
 #define NI_MAXSERV 32
+
+int MySelect(int socket);
 
 #endif
 

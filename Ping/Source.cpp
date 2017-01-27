@@ -3,6 +3,7 @@
 using namespace std;
 
 const int packageDataSize = 32;
+const int TIMEOUT_MS = 2000;
 
 int main()
 {
@@ -58,8 +59,7 @@ SOCKET InitSocket(sockaddr_in my_addr)
 	SOCKET my_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 #endif
 	bind(my_socket, (sockaddr*)&my_addr, sizeof my_addr);
-	int timeout = 3000;
-	setsockopt(my_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof timeout);
+	setsockopt(my_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&TIMEOUT_MS, sizeof TIMEOUT_MS);
 
 	return my_socket;
 }
@@ -154,25 +154,40 @@ void Ping(SOCKET my_socket, string ip, char* package, int package_size, sockaddr
 		sockaddr_in out_ = { 0 };
 		out_.sin_family = AF_INET;
 
+#if  defined _WIN32 || defined _WIN64
 		if (recvfrom(my_socket, bf, 256, 0, (sockaddr*)&out_, &outlent) == SOCKET_ERROR)
 		{
-#if  defined _WIN32 || defined _WIN64
 			if (WSAGetLastError() == WSAETIMEDOUT)
 			{
 				cout << "Request timeout\n";
 				continue;
 			}
-#elif defined __linux__
-			PrintLastError();
-#endif
 		}
+#elif defined __linux__
+        switch (MySelect(my_socket)) {
+            case -1:
+                PrintLastError();
+                return;
+            case 0:
+                cout << "Request timeout\n";
+                continue;
+            default:
+                break;
+        }
+        if (recvfrom(my_socket, bf, 256, 0, (sockaddr*)&out_, &outlent) == SOCKET_ERROR)
+            PrintLastError();
+#endif
 #if  defined _WIN32 || defined _WIN64
 		Analize(bf, &out_, GetTickCount() - sendTime);
 #elif defined __linux__
 		Analize(bf, &out_, time(0) - sendTime);
 #endif
 		memset(bf, 0, 0);
-		Sleep(1000);
+#if  defined _WIN32 || defined _WIN64
+        Sleep(1000);
+#elif defined __linux__
+        sleep(1);
+#endif
 	}
 }
 
@@ -249,3 +264,21 @@ unsigned long inet_addr(string cp)
 {
 	return inet_addr(cp.c_str());
 }
+
+#if defined __linux__
+int MySelect(int socket) {
+    fd_set fds;
+    struct timeval tv;
+
+    // Set up the file descriptor set.
+    FD_ZERO(&fds);
+    FD_SET(socket, &fds);
+
+    // Set up the struct timeval for the timeout.
+    tv.tv_sec = TIMEOUT_MS / 1000;
+    tv.tv_usec = (TIMEOUT_MS % 1000) * 1000;
+
+    // Wait until timeout or data received.
+    return select(socket + 1, &fds, NULL, NULL, &tv);
+}
+#endif
